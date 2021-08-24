@@ -1,58 +1,54 @@
-##composite.nim
+##composition.nim
 ##Author: David J. Meagher (DavidMeagher1)
 
-##This module impliments a Composite pattern and these have eventListeners, mostly to make intercommunication between Composites
+##This module impliments a Component pattern and these have eventListeners, mostly to make intercommunication between Composites
 
 import composition/event,hashes
 export Event
 type
-  CompositeObj = object of RootObj
-    fchildren:seq[Composite]
+  MethodOverrideDefect = object of Defect
+  Component* = ref object of RootObj
+  Composite* {.final.}= ref object of Component
+    fchildren:seq[Component]
+  Node* = ref object of Component
     eventListener:EventListener
-  Composite* = ref object of CompositeObj
 
-var CompositeEventHandler = newEventHandler()
+var GlobalHandler = newEventHandler()
 
-proc `=destroy`(compositeObj:var CompositeObj) =
-  if not compositeObj.fchildren.len == 0:
-    compositeObj.fchildren.setLen(0)
+template RaiseMethodOverriteDefect():untyped =
+  raise newException(MethodOverrideDefect,"Method must be overwritten!")
 
+method init*(component:Component) {.base.} = RaiseMethodOverriteDefect()
+method add*(component:Component;newNode:Component):Composite {.base.} = RaiseMethodOverriteDefect()
+method del*(component:Component;oldNode:Component):Composite {.base.} = RaiseMethodOverriteDefect()
+method children*(component:Component):seq[Component] {.base.} = RaiseMethodOverriteDefect()
+method register*(component:Component,id:string,someProc:proc(event:Event)) {.base,locks:"unknown".} = RaiseMethodOverriteDefect()
+proc emit*(component:Component,id:string,event:Event) =
+  GlobalHandler.notify(EmitMessage(id:id.hash,event:event))
 
-method init*(composite:Composite):void {.base.} =
-  composite.fchildren = newSeq[Composite]()
-  composite.eventListener = newEventListener(CompositeEventHandler)
-  CompositeEventHandler.add(composite.eventListener)
+method add*(composite:Composite,newNode:Component):Composite {.discardable.}=
+  composite.fchildren.add newNode
+  return composite
 
-method add*(composite:Composite,newComposite:Composite):void {.base.} =
-  composite.fchildren.add(newComposite)
-method del*(composite:Composite;accessor:int):void {.base.} =
-  composite.fchildren.del(accessor)
-method get*(composite:Composite,accessor:int):Composite {.base.} =
-  return composite.fchildren[accessor]
-method getChildren*(composite:Composite):seq[Composite] {.base.} =
+method del*(composite:Composite,oldNode:Component):Composite {.discardable.}=
+  composite.fchildren.del(composite.fchildren.find(oldNode))
+  return composite
+
+method children*(composite:Composite):seq[Component] =
   return composite.fchildren
-method getComposites*(composite:Composite):seq[Composite] {.base.} =
+
+method register*(composite:Composite,id:string,someProc:proc(event:Event)) =
   for child in composite.fchildren:
-    result.add child
-    result = result & child.getComposites
+    child.register(id,someProc)
 
-iterator children*(composite:Composite):Composite =
-  for child in composite.fchildren:
-    yield child
+method add*(node:Node,newNode:Component):Composite =
+  result = new Composite
+  result.add(node)
+  result.add(newNode)
 
-iterator composites*(composite:Composite):Composite =
-  for child in composite.fchildren:
-    yield child
-    for grandChild in child.fchildren:
-      yield grandChild
+method init*(node:Node):void=
+  node.eventListener = newEventListener(GlobalHandler)
+  GlobalHandler.add(node.eventListener)
 
-#Event procs
-
-proc register*(composite:Composite,id:string,callback:proc(event:Event)) =
- composite.eventListener.addCallback(id.hash(),callback)
-
-proc emit*(composite:Composite,id:string,event:Event) =
-  let emitMessage = new EmitMessage
-  emitMessage.id = id.hash()
-  emitMessage.event = event
-  composite.eventListener.handler.notify(emitMessage)
+method register*(node:Node,id:string,someProc:proc(event:Event)) =
+  node.eventListener.addCallback(id.hash,someProc)
