@@ -27,18 +27,18 @@ type
 
   EventHandler* = ref object of Handler
 
-
 ##Creates a new EventHandler
 proc newEventHandler*():EventHandler =
   result = new EventHandler
   procCall Handler(result).init
 
+var GlobalEventHandler = newEventHandler()
 
 ##Creates a new EventListener
-proc newEventListener*(handler:EventHandler):EventListener =
+proc newEventListener*(handler:EventHandler = GlobalEventHandler):EventListener =
   result = new EventListener
   result.callbacks = initTable[EventID,seq[EventCallback]]()
-  procCall Listener(result).init(handler)
+  handler.add(result)
 
 ##This method gets called when the `EventHandler` notifies its listeners to update
 method update*(eventListener:EventListener,message:Message ) =
@@ -53,5 +53,11 @@ proc addCallback*(eventListener:EventListener,eventID:EventID,callback:EventCall
   if not eventListener.callbacks.contains(eventID):
     eventListener.callbacks[eventID] = newSeq[EventCallback]()
   eventListener.callbacks[eventID].add(callback)
+
+proc getGlobalEventHandler*():EventHandler =
+  return GlobalEventHandler
+
+proc setGlobalEventHandler*(handler:EventHandler) =
+  GlobalEventHandler = handler
 
 export observer.add,observer.remove,observer.notify

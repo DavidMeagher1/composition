@@ -18,8 +18,7 @@ type
 
 
 #Listener methods
-method init*(listener:Listener,handler:Handler) {.base.} =
-  listener.handler = handler
+method init*(listener:Listener) {.base.} = raise newException(Defect,"Method must be overwritten!")
 
 method update*(listener:Listener,message:Message) {.base,locks:"unknown".} =
   raise newException(Defect,"Method must be overwritten!")
@@ -33,11 +32,16 @@ method notify*(handler:Handler,message:Message) {.base,gcsafe.} =
   for listener in handler.listeners:
     listener.update(message)
 
-method add*(handler:Handler,listener:Listener) {.base.} =
-  handler.listeners.add(listener)
-
 method remove*(handler:Handler,listener:Listener) {.base.} =
   assert handler.listeners.contains(listener)
   listener.handler = nil
   handler.listeners.del(handler.listeners.find(listener))
+
+method add*(handler:Handler,listener:Listener) {.base.} =
+  if listener.handler != nil:
+    listener.handler.remove(listener)
+  listener.handler = handler
+  handler.listeners.add(listener)
+
+
 
