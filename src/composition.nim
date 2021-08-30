@@ -3,11 +3,12 @@
 
 ##This module impliments a Component pattern and these have eventListeners, mostly to make intercommunication between Composites
 
-import composition/event,hashes,tables
+import composition/event,hashes
 #export Event
 type
   MethodOverrideDefect = object of Defect
   Component* = ref object of RootObj
+    parent:Composite
   Composite* {.final.}= ref object of Component
     fchildren:seq[Component]
   Node* = ref object of Component
@@ -16,20 +17,20 @@ type
 template RaiseMethodOverriteDefect():untyped =
   raise newException(MethodOverrideDefect,"Method must be overwritten!")
 
-method init*(component:Component) {.base.} = RaiseMethodOverriteDefect()
-method add*(component:Component;newNode:Component):Composite {.base.} = RaiseMethodOverriteDefect()
-method del*(component:Component;oldNode:Component):Composite {.base.} = RaiseMethodOverriteDefect()
+method init*(component:Component) {.base,locks:"unknown".} = RaiseMethodOverriteDefect()
+method add*(component:Component;newNode:Component) {.base.} = RaiseMethodOverriteDefect()
+method del*(component:Component;oldNode:Component) {.base.} = RaiseMethodOverriteDefect()
 method children*(component:Component):seq[Component] {.base.} = RaiseMethodOverriteDefect()
 method register*(component:Component,id:string,someProc:proc(event:Event)) {.base,locks:"unknown".} = RaiseMethodOverriteDefect()
 method emit*(component:Component,id:string,event:Event) {.base, locks:"unknown".}= RaiseMethodOverriteDefect()
 
-method add*(composite:Composite,newNode:Component):Composite {.discardable.}=
+method add*(composite:Composite,newNode:Component) =
   composite.fchildren.add newNode
-  return composite
+  newNode.parent = composite
 
-method del*(composite:Composite,oldNode:Component):Composite {.discardable.}=
+method del*(composite:Composite,oldNode:Component)=
+  oldNode.parent = nil
   composite.fchildren.del(composite.fchildren.find(oldNode))
-  return composite
 
 method children*(composite:Composite):seq[Component] =
   return composite.fchildren
@@ -45,14 +46,26 @@ method emit*(composite:Composite,id:string,event:Event) =
 method init*(node:Node) =
   node.eventListener = newEventListener()
 
-method add*(node:Node,newNode:Component):Composite =
-  result = new Composite
-  result.add(node)
-  result.add(newNode)
-  
+method add*(node:Node,newNode:Component) =
+  var newComposite = new Composite
+  if node.parent == nil:
+    raise newException(Defect,"Node must have a parent to be able to add a child")
+  else:
+    let oldParent = node.parent
+    oldParent.del(node)
+    newComposite.add(node)
+    newComposite.add(newNode)
+    oldParent.add(newComposite)
+
 
 method register*(node:Node,id:string,someProc:proc(event:Event)) =
   node.eventListener.addCallback(id.hash,someProc)
 
 method emit*(node:Node,id:string,event:Event) =
   node.eventListener.handler.notify(EmitMessage(id:id.hash,event:event))
+
+
+proc newTree*(nodes:varargs[Component]):Composite =
+  result = new Composite
+  for node in nodes:
+    result.add(node)
